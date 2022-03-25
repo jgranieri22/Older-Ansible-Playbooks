@@ -1,0 +1,84 @@
+---
+
+- name: Create a VIP, pool, pool members, and nodes
+  hosts: BIG-IP
+  connection: local
+
+  vars_files:
+    - ./f5_variables.yaml
+
+  vars:
+    state: "present"
+    user: jgranieri
+
+  environment:
+    F5_SERVER: "{{ inventory_hostname }}"
+    F5_SERVER_PORT: 443
+    F5_USER: "{{ user }}"
+    F5_PASSWORD: "{{ password }}"
+    F5_VALIDATE_CERTS: "no"
+
+  tasks:
+    - name: "Create TVCO PS Price VS"
+      bigip_virtual_server:
+        name: "{{ vip1_name }}"
+        description: "{{ vip1_description }}"
+        destination: "{{ vip1_ip }}"
+        port: "{{ vip1_port }}"
+        snat: "none"
+        type: "performance-l4"
+        security_log_profiles: "vs_afm_log_policy"
+        all_profiles:
+          - "DoS_Test_Profile"
+          - "CPG_fastL4"
+        state: "{{ vs1_state }}"
+
+    - name: "Create TVCO PS ORDER Virtual Server"
+      bigip_virtual_server:
+        name: "{{ vip2_name }}"
+        description: "{{ vip2_description }}"
+        destination: "{{ vip2_ip }}"
+        port: "{{ vip2_port }}"
+        snat: "none"
+        type: "performance-l4"
+        security_log_profiles: "vs_afm_log_policy"
+        all_profiles:
+          - "DoS_Test_Profile"
+          - "CPG_fastL4"
+        state: "{{ vs2_state }}"
+
+    - name: "Create TVCO 1st PS Pool"
+      bigip_pool:
+        name: "{{ pool1_name }}"
+        monitors: "{{ pool_monitor }}"
+        monitor_type: "{{ pool_monitor_type }}"
+        lb_method: "{{ pool_lb_method }}"
+        service_down_action:  "{{ pool_svc_down_action }}"
+        state: "{{ pool_state }}"
+
+    - name: "Create TVCO 2nd PS Pool"
+      bigip_pool:
+        name: "{{ pool2_name }}"
+        monitors: "{{ pool_monitor }}"
+        monitor_type: "{{ pool_monitor_type }}"
+        lb_method: "{{ pool_lb_method }}"
+        service_down_action:  "{{ pool_svc_down_action }}"
+        state: "{{ pool_state }}"
+
+    - name: "Add Pool Members to TVCO PRICE PS POOL"
+      bigip_pool_member:
+        name: "{{ item.name }}"
+        port: "{{ pool1_port }}"
+        pool: "{{ pool1_name }}"
+        state: "{{ pool_state }}"
+      loop:
+        - { name: "{{ poolmember1 }}" }
+        - { name: "{{ poolmember2 }}" }
+
+    - name: "Change VS Mirroring option via tmsh command"
+      bigip_command:
+        commands:
+          -  modify /ltm virtual TVCO_COLO-CLIENT1_PRICE mirror enabled
+          -  modify /ltm virtual TVCO_COLO-CLIENT1_ORDER mirror enabled
+      register: result
+
